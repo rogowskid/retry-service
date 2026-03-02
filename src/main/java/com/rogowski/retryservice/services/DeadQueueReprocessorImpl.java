@@ -1,16 +1,17 @@
 package com.rogowski.retryservice.services;
 
+import com.rogowski.retryservice.dtos.MessageResendResponse;
+import com.rogowski.retryservice.dtos.MessageWithDeliveryTag;
 import com.rogowski.retryservice.entities.MessageDeadHistory;
+import com.rogowski.retryservice.mapers.MessageDataMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,33 +22,45 @@ import java.util.stream.Collectors;
 public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
 
     private final RabbitTemplate rabbitTemplate;
+    private final RabbitMQManualAckService rabbitMQManualAckService;
     private final DeadQueueStorage queueStorage;
-    @Value("${dead.queues.list}")
-    private final List<String> deadQueues;
+    private final MessageDataMapper dataMapper;
     @Value("${dead.max.retries}")
     private Long maxRetries;
 
-
-    @Scheduled(fixedDelayString = "${dead.queue.interval}")
     @Override
-    public void processDeadQueues() {
-        log.info("Starting dead queue reprocessing...");
+    public MessageResendResponse processSingleDeadQueue(final String deadQueueName, final Integer batchSize) {
+        List<MessageWithDeliveryTag> messages = rabbitMQManualAckService.fetchMessages(deadQueueName, batchSize);
 
-        deadQueues.parallelStream().forEach(dq -> processSingleDeadQueue(dq, null));
-
-        log.info("Finished dead queue reprocessing...");
+        return processMessages(deadQueueName, messages);
     }
 
-    @Override
-    public void processSingleDeadQueue(final String deadQueueName, final Integer batchSize) {
-        final List<Message> messages = getMessage(deadQueueName, batchSize);
+    private MessageResendResponse processMessages(final String queueName, final List<MessageWithDeliveryTag> messages) {
+        int successCount = 0;
+        int failureCount = 0;
 
-        messages.forEach(this::resendMessage);
+        for (MessageWithDeliveryTag message : messages) {
+            try {
+                resendMessage(message.message());
+                rabbitMQManualAckService.acknowledgeMessage(queueName,
+                        message.channel(), message.deliveryTag());
+                successCount++;
+            } catch (Exception ex) {
+                log.error("Error while resending messages for queue: [{}]", queueName, ex);
+                rabbitMQManualAckService.rejectMessage(queueName, message.channel(), message.deliveryTag());
+                failureCount++;
+            }
+        }
+
+
+        log.info("Processing completed for queue: {}. Success: {}, Failures: {}",
+                queueName, successCount, failureCount);
+
+        return new MessageResendResponse(queueName, successCount, failureCount);
     }
 
     @SuppressWarnings("unchecked")
-    private void resendMessage(Message message) {
-
+    private void resendMessage(final Message message) {
         final MessageProperties props = message.getMessageProperties();
         final List<Map<String, Object>> xDeath =
                 (List<Map<String, Object>>) props.getHeaders().get("x-death");
@@ -59,8 +72,8 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
 
         final Map<String, Object> deathEntry = xDeath.getFirst();
 
-        final String originalExchange = (String) deathEntry.get("exchange");
-        final String queue = (String) deathEntry.get("queue");
+        final String originalExchange = dataMapper.covertValueToString(deathEntry.get("exchange"));
+        final String queue = dataMapper.covertValueToString(deathEntry.get("queue"));
         final Long retryCount = (Long) deathEntry.get("count");
 
         if (retryCount != null && retryCount > maxRetries) {
@@ -87,33 +100,5 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
         log.info("Resending message to exchange {}", originalExchange);
 
         rabbitTemplate.send(originalExchange, "", message);
-    }
-
-    private List<Message> getMessage(String queueName, Integer batchSize) {
-        final List<Message> messages = new ArrayList<>();
-        if (batchSize == null || batchSize == 0) {
-            while (true) {
-                Message message = getMessage(queueName);
-                if (message == null)
-                    break;
-                messages.add(message);
-            }
-        } else {
-            for (int i = 0; i < batchSize; i++) {
-                Message receive = getMessage(queueName);
-                if (receive != null)
-                    messages.add(receive);
-            }
-        }
-        return messages;
-    }
-
-    private Message getMessage(String queueName) {
-        Message receive = rabbitTemplate.receive(queueName, 1000);
-        if (receive == null) {
-            log.warn("Queue [{}] all messages have been retrieved", queueName);
-            return null;
-        }
-        return receive;
     }
 }

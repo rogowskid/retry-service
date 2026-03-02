@@ -4,8 +4,8 @@ import com.rogowski.retryservice.entities.MessageDeadHistory;
 import com.rogowski.retryservice.repositories.MessageDeadHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -15,7 +15,7 @@ public class DeadQueueStorageImpl implements DeadQueueStorage {
     private final MessageDeadHistoryRepository repository;
 
     @Override
-    @Async
+    @Transactional
     public void storeDeadMessage(MessageDeadHistory entity) {
         repository.save(entity);
     }
