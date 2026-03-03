@@ -1,0 +1,10 @@
+
+CREATE TABLE IF NOT EXISTS MESSAGE_DEAD_HISTORY (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    created_date TIMESTAMP NOT NULL,
+    exchange_name VARCHAR(255) NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+    routing_header VARCHAR(1000),
+    message_id VARCHAR(255),
+    payload TEXT NOT NULL
+);
