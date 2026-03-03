@@ -1,5 +1,6 @@
 package com.rogowski.retryservice.controllers;
 
+import com.rogowski.retryservice.dtos.MessageResendResponse;
 import com.rogowski.retryservice.services.DeadQueueReprocessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,9 +17,9 @@ public class DeadQueueReprocessorController {
     private final DeadQueueReprocessor deadQueueReprocessor;
 
     @PutMapping("/queue")
-    public ResponseEntity<Void> reprocessorQueue(@RequestParam String queueName,
-                                                 @RequestParam(required = false) Integer batchSize) {
-        deadQueueReprocessor.processSingleDeadQueue(queueName, batchSize);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<MessageResendResponse> reprocessorQueue(@RequestParam String queueName,
+                                                                  @RequestParam Integer batchSize) {
+        final MessageResendResponse result = deadQueueReprocessor.processSingleDeadQueue(queueName, batchSize);
+        return ResponseEntity.ok(result);
     }
 }
