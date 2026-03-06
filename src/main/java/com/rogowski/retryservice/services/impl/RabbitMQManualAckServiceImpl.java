@@ -1,4 +1,4 @@
-package com.rogowski.retryservice.services;
+package com.rogowski.retryservice.services.impl;
 
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.GetResponse;
@@ -6,6 +6,7 @@ import com.rogowski.retryservice.dtos.MessageWithDeliveryTag;
 import com.rogowski.retryservice.exceptions.AcknowledgeException;
 import com.rogowski.retryservice.exceptions.RejectException;
 import com.rogowski.retryservice.mapers.MessageDataMapper;
+import com.rogowski.retryservice.services.RabbitMQManualAckService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;

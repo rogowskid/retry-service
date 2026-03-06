@@ -1,6 +1,7 @@
-package com.rogowski.retryservice.services;
+package com.rogowski.retryservice.services.impl;
 
 import com.rogowski.retryservice.entities.MessageDeadHistory;
+import com.rogowski.retryservice.services.DeadQueueStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

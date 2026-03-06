@@ -1,9 +1,13 @@
-package com.rogowski.retryservice.services;
+package com.rogowski.retryservice.services.impl;
 
 import com.rogowski.retryservice.dtos.MessageResendResponse;
 import com.rogowski.retryservice.dtos.MessageWithDeliveryTag;
 import com.rogowski.retryservice.entities.MessageDeadHistory;
+import com.rogowski.retryservice.exceptions.RejectException;
 import com.rogowski.retryservice.mapers.MessageDataMapper;
+import com.rogowski.retryservice.services.DeadQueueReprocessor;
+import com.rogowski.retryservice.services.DeadQueueStorage;
+import com.rogowski.retryservice.services.RabbitMQManualAckService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
@@ -12,6 +16,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,19 +45,41 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
         int successCount = 0;
         int failureCount = 0;
 
-        for (MessageWithDeliveryTag message : messages) {
-            try {
-                resendMessage(message.message());
-                rabbitMQManualAckService.acknowledgeMessage(queueName,
-                        message.channel(), message.deliveryTag());
-                successCount++;
-            } catch (Exception ex) {
-                log.error("Error while resending messages for queue: [{}]", queueName, ex);
-                rabbitMQManualAckService.rejectMessage(queueName, message.channel(), message.deliveryTag());
-                failureCount++;
+        List<MessageWithDeliveryTag> remainingMessages = new ArrayList<>(messages);
+
+        try {
+            Iterator<MessageWithDeliveryTag> iterator = remainingMessages.iterator();
+            while (iterator.hasNext()) {
+                MessageWithDeliveryTag message = iterator.next();
+                try {
+                    resendMessage(message.message());
+                    rabbitMQManualAckService.acknowledgeMessage(queueName, message.channel(), message.deliveryTag());
+                    successCount++;
+                } catch (Exception ex) {
+                    log.error("Error while resending a message from queue: [{}], rejecting.", queueName, ex);
+                    rabbitMQManualAckService.rejectMessage(queueName, message.channel(), message.deliveryTag());
+                    failureCount++;
+                } finally {
+                    iterator.remove();
+                }
+            }
+        } catch (Throwable t) {
+            log.error("A catastrophic error occurred during message processing for queue [{}]. " +
+                    "Rejecting {} remaining messages", queueName, remainingMessages.size(), t);
+
+            for (MessageWithDeliveryTag messageToReject : remainingMessages) {
+                try {
+                    rabbitMQManualAckService.rejectMessage(queueName,
+                            messageToReject.channel(),
+                            messageToReject.deliveryTag()
+                    );
+                    failureCount++;
+                } catch (RejectException re) {
+                    log.error("Error while rejecting message: [{}] from queue: [{}]",
+                            messageToReject.deliveryTag(), queueName, re);
+                }
             }
         }
-
 
         log.info("Processing completed for queue: {}. Success: {}, Failures: {}",
                 queueName, successCount, failureCount);
@@ -96,8 +124,6 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
             log.warn("No original exchange found in x-death");
             return;
         }
-
-        log.info("Resending message to exchange {}", originalExchange);
 
         rabbitTemplate.send(originalExchange, "", message);
     }

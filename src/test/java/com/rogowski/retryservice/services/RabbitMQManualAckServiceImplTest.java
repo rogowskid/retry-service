@@ -8,6 +8,7 @@ import com.rogowski.retryservice.dtos.MessageWithDeliveryTag;
 import com.rogowski.retryservice.exceptions.AcknowledgeException;
 import com.rogowski.retryservice.exceptions.RejectException;
 import com.rogowski.retryservice.mapers.MessageDataMapper;
+import com.rogowski.retryservice.services.impl.RabbitMQManualAckServiceImpl;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
