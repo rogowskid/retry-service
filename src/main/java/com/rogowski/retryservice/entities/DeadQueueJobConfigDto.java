@@ -19,6 +19,7 @@ public class DeadQueueJobConfigDto {
     private Integer initialDelaySeconds;
     private Boolean enabled;
     private String description;
+    private Integer maxRetry;
     private Instant createdAt;
     private Instant updatedAt;
 

@@ -32,16 +32,27 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
     private final DeadQueueStorage queueStorage;
     private final MessageDataMapper dataMapper;
     @Value("${dead.max.retries}")
-    private Long maxRetries;
+    private Integer maxRetries;
 
     @Override
-    public MessageResendResponse processSingleDeadQueue(final String deadQueueName, final Integer batchSize) {
+    public MessageResendResponse processSingleDeadQueue(final String deadQueueName, final int batchSize) {
         List<MessageWithDeliveryTag> messages = rabbitMQManualAckService.fetchMessages(deadQueueName, batchSize);
 
-        return processMessages(deadQueueName, messages);
+        return processMessages(deadQueueName, maxRetries, messages);
     }
 
-    private MessageResendResponse processMessages(final String queueName, final List<MessageWithDeliveryTag> messages) {
+    @Override
+    public MessageResendResponse processSingleDeadQueue(final String deadQueueName,
+                                                        final int batchSize,
+                                                        final int maxRetry) {
+        List<MessageWithDeliveryTag> messages = rabbitMQManualAckService.fetchMessages(deadQueueName, batchSize);
+
+        return processMessages(deadQueueName, maxRetry, messages);
+    }
+
+    private MessageResendResponse processMessages(final String queueName,
+                                                  final int maxRetry,
+                                                  final List<MessageWithDeliveryTag> messages) {
         int successCount = 0;
         int failureCount = 0;
 
@@ -52,7 +63,7 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
             while (iterator.hasNext()) {
                 MessageWithDeliveryTag message = iterator.next();
                 try {
-                    resendMessage(message.message());
+                    resendMessage(message.message(), maxRetry);
                     rabbitMQManualAckService.acknowledgeMessage(queueName, message.channel(), message.deliveryTag());
                     successCount++;
                 } catch (Exception ex) {
@@ -88,7 +99,7 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
     }
 
     @SuppressWarnings("unchecked")
-    private void resendMessage(final Message message) {
+    private void resendMessage(final Message message, final int maxRetry) {
         final MessageProperties props = message.getMessageProperties();
         final List<Map<String, Object>> xDeath =
                 (List<Map<String, Object>>) props.getHeaders().get("x-death");
@@ -104,7 +115,7 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
         final String queue = dataMapper.covertValueToString(deathEntry.get("queue"));
         final Long retryCount = (Long) deathEntry.get("count");
 
-        if (retryCount != null && retryCount > maxRetries) {
+        if (retryCount != null && retryCount > maxRetry) {
             log.error("Message has more than 3 retries, skipping");
             final MessageDeadHistory messageDeadHistory = MessageDeadHistory.builder()
                     .exchangeName(originalExchange)

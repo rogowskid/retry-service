@@ -24,6 +24,7 @@ public class QuartzConfiguration implements ApplicationRunner {
     public static final String QUEUE_NAME_KEY = "queueName";
     public static final String BATCH_SIZE_KEY = "batchSize";
     public static final String JOB_CONFIG_ID_KEY = "jobConfigId";
+    public static final String MAX_RETRY_KEY = "maxRetry";
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
@@ -57,6 +58,7 @@ public class QuartzConfiguration implements ApplicationRunner {
                 .usingJobData(QUEUE_NAME_KEY, config.getQueueName())
                 .usingJobData(BATCH_SIZE_KEY, config.getBatchSize())
                 .usingJobData(JOB_CONFIG_ID_KEY, config.getId())
+                .usingJobData(MAX_RETRY_KEY, config.getMaxRetry())
                 .storeDurably()
                 .build();
 

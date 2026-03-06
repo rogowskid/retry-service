@@ -32,6 +32,7 @@ public class DeadQueueJobConfigRepository {
                     .initialDelaySeconds(rs.getInt("initial_delay_seconds"))
                     .enabled(rs.getBoolean("enabled"))
                     .description(rs.getString("description"))
+                    .maxRetry(rs.getInt("max_retry"))
                     .createdAt(rs.getTimestamp("created_at").toInstant())
                     .updatedAt(rs.getTimestamp("updated_at").toInstant())
                     .build();
@@ -62,8 +63,9 @@ public class DeadQueueJobConfigRepository {
 
     public DeadQueueJobConfigDto create(DeadQueueJobConfigDto config) {
         String sql = "INSERT INTO DEAD_QUEUE_JOB_CONFIG " +
-                "(queue_name, delay_minutes, batch_size, initial_delay_seconds, enabled, description, created_at, updated_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                "(queue_name, delay_minutes, batch_size, initial_delay_seconds, enabled, description, max_retry," +
+                " created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
         Instant now = Instant.now();
@@ -76,6 +78,7 @@ public class DeadQueueJobConfigRepository {
             ps.setInt(4, config.getInitialDelaySeconds() != null ? config.getInitialDelaySeconds() : 0);
             ps.setBoolean(5, config.getEnabled() != null ? config.getEnabled() : true);
             ps.setString(6, config.getDescription());
+            ps.setInt(7, config.getMaxRetry());
             ps.setTimestamp(7, Timestamp.from(now));
             ps.setTimestamp(8, Timestamp.from(now));
             return ps;
@@ -91,7 +94,7 @@ public class DeadQueueJobConfigRepository {
     public int update(DeadQueueJobConfigDto config) {
         String sql = "UPDATE DEAD_QUEUE_JOB_CONFIG SET " +
                 "queue_name = ?, delay_minutes = ?, batch_size = ?, " +
-                "initial_delay_seconds = ?, enabled = ?, description = ?, updated_at = ? " +
+                "initial_delay_seconds = ?, enabled = ?, description = ?, max_retry = ?, updated_at = ? " +
                 "WHERE id = ?";
 
         return jdbcTemplate.update(sql,
@@ -101,6 +104,7 @@ public class DeadQueueJobConfigRepository {
                 config.getInitialDelaySeconds(),
                 config.getEnabled(),
                 config.getDescription(),
+                config.getMaxRetry(),
                 Timestamp.from(Instant.now()),
                 config.getId()
         );

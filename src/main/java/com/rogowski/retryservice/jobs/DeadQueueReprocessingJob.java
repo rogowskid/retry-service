@@ -20,14 +20,16 @@ public class DeadQueueReprocessingJob implements Job {
     public void execute(JobExecutionContext context) throws JobExecutionException {
         JobDataMap dataMap = context.getJobDetail().getJobDataMap();
         String queueName = dataMap.getString(QuartzConfiguration.QUEUE_NAME_KEY);
-        Integer batchSize = dataMap.getInt(QuartzConfiguration.BATCH_SIZE_KEY);
+        int batchSize = dataMap.getInt(QuartzConfiguration.BATCH_SIZE_KEY);
         Long jobConfigId = dataMap.getLong(QuartzConfiguration.JOB_CONFIG_ID_KEY);
+        int maxRetry = dataMap.getInt(QuartzConfiguration.MAX_RETRY_KEY);
 
-        log.info("Starting Quartz job [ID: {}] for queue: [{}] with batch size: [{}]",
-                jobConfigId, queueName, batchSize);
+        log.info("Starting Quartz job [ID: {}] for queue: [{}] with batch size: [{}] and max retry: [{}]",
+                jobConfigId, queueName, batchSize, maxRetry);
 
         try {
-            MessageResendResponse response = deadQueueReprocessor.processSingleDeadQueue(queueName, batchSize);
+            MessageResendResponse response = deadQueueReprocessor.processSingleDeadQueue(queueName, batchSize,
+                    maxRetry);
             log.info("Quartz job [ID: {}] completed successfully for queue: [{}]. Success: [{}], Failures: [{}]",
                     jobConfigId, queueName, response.successCount(), response.failureCount());
         } catch (Exception e) {
