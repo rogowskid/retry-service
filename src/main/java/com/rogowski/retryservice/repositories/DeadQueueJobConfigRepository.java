@@ -38,30 +38,30 @@ public class DeadQueueJobConfigRepository {
 
 
     public List<DeadQueueJobConfigDto> findAllActive() {
-        String sql = "SELECT * FROM dead_queue_job_config WHERE enabled = true ORDER BY id";
+        String sql = "SELECT * FROM DEAD_QUEUE_JOB_CONFIG WHERE enabled = true ORDER BY id";
         return jdbcTemplate.query(sql, rowMapper);
     }
 
     public Optional<DeadQueueJobConfigDto> findById(Long id) {
-        String sql = "SELECT * FROM dead_queue_job_config WHERE id = ?";
+        String sql = "SELECT * FROM DEAD_QUEUE_JOB_CONFIG WHERE id = ?";
         List<DeadQueueJobConfigDto> results = jdbcTemplate.query(sql, rowMapper, id);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.getFirst());
     }
 
     public Optional<DeadQueueJobConfigDto> findByQueueName(String queueName) {
-        String sql = "SELECT * FROM dead_queue_job_config WHERE queue_name = ?";
+        String sql = "SELECT * FROM DEAD_QUEUE_JOB_CONFIG WHERE queue_name = ?";
         List<DeadQueueJobConfigDto> results = jdbcTemplate.query(sql, rowMapper, queueName);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.getFirst());
     }
 
     public boolean existsByQueueName(String queueName) {
-        String sql = "SELECT COUNT(*) FROM dead_queue_job_config WHERE queue_name = ?";
+        String sql = "SELECT COUNT(*) FROM DEAD_QUEUE_JOB_CONFIG WHERE queue_name = ?";
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, queueName);
         return count != null && count > 0;
     }
 
     public DeadQueueJobConfigDto create(DeadQueueJobConfigDto config) {
-        String sql = "INSERT INTO dead_queue_job_config " +
+        String sql = "INSERT INTO DEAD_QUEUE_JOB_CONFIG " +
                 "(queue_name, delay_minutes, batch_size, initial_delay_seconds, enabled, description, created_at, updated_at) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
@@ -89,7 +89,7 @@ public class DeadQueueJobConfigRepository {
     }
 
     public int update(DeadQueueJobConfigDto config) {
-        String sql = "UPDATE dead_queue_job_config SET " +
+        String sql = "UPDATE DEAD_QUEUE_JOB_CONFIG SET " +
                 "queue_name = ?, delay_minutes = ?, batch_size = ?, " +
                 "initial_delay_seconds = ?, enabled = ?, description = ?, updated_at = ? " +
                 "WHERE id = ?";
@@ -105,15 +105,4 @@ public class DeadQueueJobConfigRepository {
                 config.getId()
         );
     }
-
-    public int delete(Long id) {
-        String sql = "DELETE FROM dead_queue_job_config WHERE id = ?";
-        return jdbcTemplate.update(sql, id);
-    }
-
-    public int toggleEnabled(Long id, boolean enabled) {
-        String sql = "UPDATE dead_queue_job_config SET enabled = ?, updated_at = ? WHERE id = ?";
-        return jdbcTemplate.update(sql, enabled, Timestamp.from(Instant.now()), id);
-    }
-
 }
