@@ -4,7 +4,6 @@ import com.rogowski.retryservice.entities.MessageDeadHistory;
 import com.rogowski.retryservice.services.DeadQueueStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,8 +16,6 @@ import java.sql.Timestamp;
 public class DeadQueueStorageImpl implements DeadQueueStorage {
 
     private final JdbcTemplate jdbcTemplate;
-    @Value("${spring.jdbc.insert.sql}")
-    private String insertSQL;
 
     @Override
     @Transactional
@@ -26,6 +23,8 @@ public class DeadQueueStorageImpl implements DeadQueueStorage {
         if (entity == null) {
             return;
         }
+        final String insertSQL = "INSERT INTO MESSAGE_DEAD_HISTORY " +
+                "  (CREATED_DATE, EXCHANGE_NAME, QUEUE_NAME, ROUTING_HEADER, MESSAGE_ID, PAYLOAD) VALUES (?, ?, ?, ?, ?, ?)";
 
         jdbcTemplate.update(insertSQL,
                 Timestamp.from(entity.getCreatedDate()),
