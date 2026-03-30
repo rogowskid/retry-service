@@ -1,5 +1,6 @@
 package com.rogowski.retryservice.services.impl;
 
+import com.rabbitmq.client.Channel;
 import com.rogowski.retryservice.dtos.MessageResendResponse;
 import com.rogowski.retryservice.dtos.MessageWithDeliveryTag;
 import com.rogowski.retryservice.entities.MessageDeadHistory;
@@ -12,14 +13,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.connection.Connection;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Iterator;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,6 +30,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
 
+    private final ConnectionFactory connectionFactory;
     private final RabbitTemplate rabbitTemplate;
     private final RabbitMQManualAckService rabbitMQManualAckService;
     private final DeadQueueStorage queueStorage;
@@ -36,64 +40,69 @@ public class DeadQueueReprocessorImpl implements DeadQueueReprocessor {
 
     @Override
     public MessageResendResponse processSingleDeadQueue(final String deadQueueName, final int batchSize) {
-        List<MessageWithDeliveryTag> messages = rabbitMQManualAckService.fetchMessages(deadQueueName, batchSize);
-
-        return processMessages(deadQueueName, maxRetries, messages);
+        return processSingleDeadQueue(deadQueueName, batchSize, maxRetries);
     }
 
     @Override
     public MessageResendResponse processSingleDeadQueue(final String deadQueueName,
                                                         final int batchSize,
                                                         final int maxRetry) {
-        List<MessageWithDeliveryTag> messages = rabbitMQManualAckService.fetchMessages(deadQueueName, batchSize);
-
-        return processMessages(deadQueueName, maxRetry, messages);
-    }
-
-    private MessageResendResponse processMessages(final String queueName,
-                                                  final int maxRetry,
-                                                  final List<MessageWithDeliveryTag> messages) {
         int successCount = 0;
         int failureCount = 0;
 
-        List<MessageWithDeliveryTag> remainingMessages = new ArrayList<>(messages);
+        try (Connection connection = connectionFactory.createConnection();
+             Channel channel = connection.createChannel(false)
+        ) {
+            long messagesCount = rabbitMQManualAckService.getMessagesCount(channel, deadQueueName);
+            long counter = 0L;
+
+            while (counter < messagesCount && counter < batchSize) {
+                MessageWithDeliveryTag message = rabbitMQManualAckService.getMessage(channel, deadQueueName);
+                MessageResendResponse response = processMessage(deadQueueName, maxRetry, message);
+                successCount += response.successCount();
+                failureCount += response.failureCount();
+                counter++;
+            }
+        } catch (IOException | TimeoutException e) {
+            throw new RuntimeException(e);
+        }
+        return new MessageResendResponse(deadQueueName, successCount, failureCount);
+    }
+
+    private MessageResendResponse processMessage(final String queueName,
+                                                 final int maxRetry,
+                                                 final MessageWithDeliveryTag message) {
+        int successCount = 0;
+        int failureCount = 0;
 
         try {
-            Iterator<MessageWithDeliveryTag> iterator = remainingMessages.iterator();
-            while (iterator.hasNext()) {
-                MessageWithDeliveryTag message = iterator.next();
-                try {
-                    resendMessage(message.message(), maxRetry);
-                    rabbitMQManualAckService.acknowledgeMessage(queueName, message.channel(), message.deliveryTag());
-                    successCount++;
-                } catch (Exception ex) {
-                    log.error("Error while resending a message from queue: [{}], rejecting.", queueName, ex);
-                    rabbitMQManualAckService.rejectMessage(queueName, message.channel(), message.deliveryTag());
-                    failureCount++;
-                } finally {
-                    iterator.remove();
-                }
+            try {
+                resendMessage(message.message(), maxRetry);
+                rabbitMQManualAckService.acknowledgeMessage(queueName, message.channel(), message.deliveryTag());
+                successCount++;
+            } catch (Exception ex) {
+                log.error("Error while resending a message from queue: [{}], rejecting.", queueName, ex);
+                rabbitMQManualAckService.rejectMessage(queueName, message.channel(), message.deliveryTag());
+                failureCount++;
             }
-        } catch (Throwable t) {
-            log.error("A catastrophic error occurred during message processing for queue [{}]. " +
-                    "Rejecting {} remaining messages", queueName, remainingMessages.size(), t);
 
-            for (MessageWithDeliveryTag messageToReject : remainingMessages) {
-                try {
-                    rabbitMQManualAckService.rejectMessage(queueName,
-                            messageToReject.channel(),
-                            messageToReject.deliveryTag()
-                    );
-                    failureCount++;
-                } catch (RejectException re) {
-                    log.error("Error while rejecting message: [{}] from queue: [{}]",
-                            messageToReject.deliveryTag(), queueName, re);
-                }
+        } catch (Throwable t) {
+            log.error("A catastrophic error occurred during message processing for queue [{}]", queueName, t);
+
+            try {
+                rabbitMQManualAckService.rejectMessage(queueName,
+                        message.channel(),
+                        message.deliveryTag()
+                );
+                failureCount++;
+            } catch (RejectException re) {
+                log.error("Error while rejecting message: [{}] from queue: [{}]",
+                        message.deliveryTag(), queueName, re);
             }
         }
 
-        log.info("Processing completed for queue: {}. Success: {}, Failures: {}",
-                queueName, successCount, failureCount);
+        log.info("Processing completed message for queue: {}. Success: {}, Failures: {}", queueName,
+                successCount, failureCount);
 
         return new MessageResendResponse(queueName, successCount, failureCount);
     }

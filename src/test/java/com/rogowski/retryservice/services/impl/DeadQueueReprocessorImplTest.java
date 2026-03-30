@@ -19,9 +19,11 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 
+@SuppressWarnings("unused")
 @ExtendWith(MockitoExtension.class)
 class DeadQueueReprocessorImplTest {
 
@@ -44,7 +46,7 @@ class DeadQueueReprocessorImplTest {
     }
 
     @Test
-    void processSingleDeadQueue_whenMessagesExists_thenReprocessing() {
+    void processSingleDeadQueue_whenMessagesExists_thenReprocessing() throws IOException {
         //when
         final HashMap<String, Object> xDeathProperties = new HashMap<>();
         xDeathProperties.put("exchange", "exchange.test");
@@ -54,13 +56,9 @@ class DeadQueueReprocessorImplTest {
         header.put("x-death", List.of(xDeathProperties));
         MessageProperties messageProperties = new MessageProperties();
         messageProperties.setHeaders(header);
-        List<MessageWithDeliveryTag> messages = List.of(new MessageWithDeliveryTag(
-                new Message("abc".getBytes(),
-                        messageProperties),
-                1L, channelN)
-        );
-        Mockito.when(rabbitMQManualAckService.fetchMessages(Mockito.anyString(), Mockito.anyInt()))
-                .thenReturn(messages);
+
+        Mockito.when(rabbitMQManualAckService.getMessage(Mockito.any(ChannelN.class), Mockito.anyString()))
+                .thenReturn(new MessageWithDeliveryTag(new Message("abc".getBytes(), messageProperties), 1L, channelN));
         Mockito.doNothing().when(rabbitMQManualAckService)
                 .acknowledgeMessage(Mockito.anyString(), Mockito.any(ChannelN.class), Mockito.anyLong());
         Mockito.when(dataMapper.covertValueToString("exchange.test"))
@@ -82,7 +80,7 @@ class DeadQueueReprocessorImplTest {
         Assertions.assertEquals(0, response.failureCount());
         Assertions.assertEquals("test.queue", response.queueName());
         Mockito.verify(rabbitMQManualAckService, Mockito.times(1))
-                .fetchMessages(Mockito.anyString(), Mockito.anyInt());
+                .getMessage(Mockito.any(ChannelN.class), Mockito.anyString());
         Mockito.verify(rabbitMQManualAckService, Mockito.times(1))
                 .acknowledgeMessage(Mockito.anyString(), Mockito.any(ChannelN.class), Mockito.anyLong());
         Mockito.verify(dataMapper, Mockito.times(2))
@@ -92,7 +90,7 @@ class DeadQueueReprocessorImplTest {
     }
 
     @Test
-    void processSingleDeadQueue_whenMessageExistsBhtThrowException_thenRejectMessage(){
+    void processSingleDeadQueue_whenMessageExistsBhtThrowException_thenRejectMessage() throws IOException {
         //when
         final HashMap<String, Object> xDeathProperties = new HashMap<>();
         xDeathProperties.put("exchange", "exchange.test");
@@ -102,13 +100,12 @@ class DeadQueueReprocessorImplTest {
         header.put("x-death", List.of(xDeathProperties));
         MessageProperties messageProperties = new MessageProperties();
         messageProperties.setHeaders(header);
-        List<MessageWithDeliveryTag> messages = List.of(new MessageWithDeliveryTag(
-                new Message("abc".getBytes(),
-                        messageProperties),
-                1L, channelN)
-        );
-        Mockito.when(rabbitMQManualAckService.fetchMessages(Mockito.anyString(), Mockito.anyInt()))
-                .thenReturn(messages);
+
+        Mockito.when(rabbitMQManualAckService.getMessage(Mockito.any(ChannelN.class), Mockito.anyString()))
+                .thenReturn(new MessageWithDeliveryTag(
+                        new Message("abc".getBytes(),
+                                messageProperties),
+                        1L, channelN));
         Mockito.doThrow(NullPointerException.class).when(dataMapper)
                 .covertValueToString(Mockito.any());
 
@@ -122,7 +119,7 @@ class DeadQueueReprocessorImplTest {
         Assertions.assertEquals(1, response.failureCount());
         Assertions.assertEquals("test.queue", response.queueName());
         Mockito.verify(rabbitMQManualAckService, Mockito.times(1))
-                .fetchMessages(Mockito.anyString(), Mockito.anyInt());
+                .getMessage(Mockito.any(ChannelN.class), Mockito.anyString());
         Mockito.verify(rabbitMQManualAckService, Mockito.times(1))
                 .rejectMessage(Mockito.anyString(), Mockito.any(ChannelN.class), Mockito.anyLong());
     }

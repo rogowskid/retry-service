@@ -21,7 +21,6 @@ import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.SimpleConnection;
 
 import java.io.IOException;
-import java.util.List;
 
 @ExtendWith(MockitoExtension.class)
 class RabbitMQManualAckServiceImplTest {
@@ -52,10 +51,11 @@ class RabbitMQManualAckServiceImplTest {
                 .thenReturn(new Message("abc".getBytes()));
 
         //given
-        List<MessageWithDeliveryTag> result = service.fetchMessages("queueName", 10);
+        MessageWithDeliveryTag result = service.getMessage(channelN, "queueName");
 
         //given
-        Assertions.assertEquals(10, result.size());
+        Assertions.assertEquals(1L, result.deliveryTag());
+        Assertions.assertEquals("abc", new String(result.message().getBody()));
         Mockito.verify(channelN, Mockito.times(10))
                 .basicGet(Mockito.anyString(), Mockito.anyBoolean());
     }

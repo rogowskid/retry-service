@@ -3,18 +3,9 @@ package com.rogowski.retryservice.services;
 import com.rabbitmq.client.Channel;
 import com.rogowski.retryservice.dtos.MessageWithDeliveryTag;
 
-import java.util.List;
+import java.io.IOException;
 
 public interface RabbitMQManualAckService {
-
-    /**
-     * Fetching messages without automatic confirmation (ack)
-     *
-     * @param queueName - queue name
-     * @param batchSize - Maximum number of messages to fetch
-     * @return - List of messages with delivery tags
-     */
-    List<MessageWithDeliveryTag> fetchMessages(String queueName, int batchSize);
 
     /**
      * Acknowledge message
@@ -24,6 +15,17 @@ public interface RabbitMQManualAckService {
      * @param deliveryTag - id a message
      */
     void acknowledgeMessage(String queueName, Channel channel, long deliveryTag);
+
+    /**
+     * Fetch message without automatic confirmation (ack)
+     *
+     * @param channel   - channel
+     * @param queueName - queue name
+     * @return - message
+     */
+    MessageWithDeliveryTag getMessage(Channel channel, String queueName) throws IOException;
+
+    long getMessagesCount(Channel channel, String queueName) throws IOException;
 
     /**
      * Reject message
